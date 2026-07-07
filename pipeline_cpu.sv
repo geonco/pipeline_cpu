@@ -87,14 +87,15 @@ module pipeline_cpu
     //logic           regfile_zero;   // zero detection from regfile, REMOVED
 
     assign pc_next_plus4 = pc_curr + 4;
-    assign pc_next_sel = /* FILL THIS */ 
+    assign pc_next_sel = branch_taken; 
     assign pc_next = (pc_next_sel) ? pc_next_branch: pc_next_plus4;
 
     always_ff @ (posedge clk or negedge reset_b) begin
         if (~reset_b) begin
             pc_curr <= 'b0;
         end else begin
-             /* FILL THIS */ 
+            if (pc_write)
+                pc_curr <= pc_next;
         end
     end
 
@@ -129,11 +130,11 @@ module pipeline_cpu
         if (~reset_b) begin
             id <= 'b0;
         end else begin
-            if (  /* FILL THIS */ ) begin
+            if (if_flush) begin
                 id <= 'b0;
-            end else if (  /* FILL THIS */ ) begin
-                id.pc <=  /* FILL THIS */ 
-                id.inst <=  /* FILL THIS */ 
+            end else if (~if_stall) begin
+                id.pc <= pc_curr; 
+                id.inst <= inst; 
             end
         end
     end
@@ -162,28 +163,23 @@ module pipeline_cpu
     logic   [2:0]   funct3;
 
     // COMPLETE THE MAIN CONTROL UNIT HERE
+    assign opcode = id.inst[6:0];
+    assign funct3 = id.inst[14:12];
+    assign funct7 = id.inst[31:25];
+    
+    assign branch[0] = ((opcode==7'b1100011) && (funct3==3'b000)) ? 1'b1: 1'b0;  // beq
+    assign branch[1] = ((opcode==7'b1100011) && (funct3==3'b001)) ? 1'b1: 1'b0;  // bne
+    assign branch[2] = ((opcode==7'b1100011) && (funct3==3'b100)) ? 1'b1: 1'b0;  // blt
+    assign branch[3] = ((opcode==7'b1100011) && (funct3==3'b101)) ? 1'b1: 1'b0;  // bge
 
+    assign mem_read = (opcode==7'b0000011) ? 1'b1: 1'b0;    // ld
+    assign mem_write = (opcode==7'b0100011) ? 1'b1: 1'b0;   // sd
+    assign mem_to_reg = mem_read;
+    assign reg_write = (opcode==7'b0110011) | (opcode==7'b0010011) | mem_read;   // ld, r-type, i-type
+    assign alu_src = ( mem_read | mem_write | (opcode==7'b0010011) ) ? 1'b1: 1'b0;   // ld, sd, i-type
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    assign alu_op[0] = |branch;                                         // branch -> 01
+    assign alu_op[1] = (opcode==7'b0110011) | (opcode==7'b0010011);     // r-type/i-type -> 10
 
     // --------------------------------------------------------------------
 
@@ -197,12 +193,14 @@ module pipeline_cpu
     // COMPLETE IMMEDIATE GENERATOR HERE
     logic   [11:0]  imm12;
 
-    assign imm12 =  /* FILL THIS */ 
-    assign imm32 =  /* FILL THIS */ 
-    assign imm32_branch =  /* FILL THIS */ // << 1 for branch
+    assign imm12 = (opcode == 7'b0100011) ? {id.inst[31:25], id.inst[11:7]} :                          // S-type
+                   (opcode == 7'b1100011) ? {id.inst[31], id.inst[7], id.inst[30:25], id.inst[11:8]} : // B-type
+                   id.inst[31:20];                                                                     // I-type (default)
+    assign imm32 = {{20{imm12[11]}}, imm12};
+    assign imm32_branch = imm32 << 1;
 
     // Computing branch target
-    assign pc_next_branch =  /* FILL THIS */ 
+    assign pc_next_branch = ex.pc + (ex.imm32 << 1); 
 
     // ----------------------------------------------------------------------
 
@@ -219,15 +217,15 @@ module pipeline_cpu
     logic           id_stall, id_flush;
 
 
-    assign stall_by_load_use =  /* FILL THIS */ 
-    assign flush_by_branch =  /* FILL THIS */ 
+    assign stall_by_load_use = ex.mem_read & ((ex.rd == rs1) | (ex.rd == rs2)) & (|ex.rd);
+    assign flush_by_branch = branch_taken;
   
-    assign id_flush =  /* FILL THIS */ 
-    assign id_stall =  /* FILL THIS */ 
+    assign id_flush = stall_by_load_use | flush_by_branch;
+    assign id_stall = 1'b0;
 	
-    assign if_flush =  /* FILL THIS */ 
-    assign if_stall =  /* FILL THIS */ 
-    assign pc_write =  /* FILL THIS */ 
+    assign if_flush = flush_by_branch;
+    assign if_stall = stall_by_load_use;
+    assign pc_write = ~stall_by_load_use;
 
     // ----------------------------------------------------------------------
 
@@ -237,23 +235,23 @@ module pipeline_cpu
     logic   [REG_WIDTH-1:0] rd_din;
     logic   [REG_WIDTH-1:0] rs1_dout, rs2_dout;
     
-    assign rs1 =  /* FILL THIS */     // our processor does NOT support U and UJ types
-    assign rs2 =  /* FILL THIS */     // consider ld and i-type
-    assign rd =  /* FILL THIS */ 
+    assign rs1 = id.inst[19:15];     // our processor does NOT support U and UJ types
+    assign rs2 = id.inst[24:20];     // consider ld and i-type
+    assign rd = id.inst[11:7]; 
     // rd, rd_din, and reg_write will be determined in WB stage
     
     // instnatiation of register file
     regfile #(
         .REG_WIDTH          (REG_WIDTH)
     ) u_regfile_0 (
-        .clk                ( /* FILL THIS */ ),
-        .rs1                ( /* FILL THIS */ ),
-        .rs2                ( /* FILL THIS */ ),
-        .rd                 ( /* FILL THIS */ ),
-        .rd_din             ( /* FILL THIS */ ),
-        .reg_write          ( /* FILL THIS */ ),
-        .rs1_dout           ( /* FILL THIS */ ),
-        .rs2_dout           ( /* FILL THIS */ )
+        .clk                (clk),
+        .rs1                (rs1),
+        .rs2                (rs2),
+        .rd                 (wb.rd),
+        .rd_din             (rd_din),
+        .reg_write          (wb.reg_write),
+        .rs1_dout           (rs1_dout),
+        .rs2_dout           (rs2_dout)
     );
 
     //assign regfile_zero = ~|(rs1_dout ^ rs2_dout); // REMOVED
@@ -270,7 +268,28 @@ module pipeline_cpu
         if (~reset_b) begin
             ex <= 'b0;
         end else begin
-             /* FILL THIS */ 
+            if (id_flush) begin
+                ex <= 'b0;
+            end else if (~id_stall) begin
+                ex.pc <= id.pc;
+                ex.rs1_dout <= rs1_dout;
+                ex.rs2_dout <= rs2_dout;
+                ex.imm32 <= imm32;
+                ex.funct3 <= funct3;
+                ex.funct7 <= funct7;
+                ex.branch <= branch;
+                ex.alu_src <= alu_src;
+                ex.alu_op <= alu_op;
+                ex.mem_read <= mem_read;
+                ex.mem_write <= mem_write;
+                ex.rs1 <= rs1;
+                ex.rs2 <= rs2;
+                ex.rd  <= rd;
+                ex.reg_write <= reg_write;
+                ex.mem_to_reg <= mem_to_reg;
+            end
+        end
+    end
 			 
 			 
 			 
