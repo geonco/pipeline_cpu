@@ -1,0 +1,12 @@
+# Ignore everything by default
+*
+
+# Whitelist only the files we want to track
+!.gitignore
+!alu.sv
+!dmem_unaligned.sv
+!imem.sv
+!imem.s
+!pipeline_cpu.sv
+!regfile.sv
+!tb_pipeline_cpu.cpp
