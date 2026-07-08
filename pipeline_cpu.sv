@@ -290,25 +290,7 @@ module pipeline_cpu
             end
         end
     end
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-			 
-        end
-    end
+
 
     // ------------------------------------------------------------------
 
@@ -328,19 +310,19 @@ module pipeline_cpu
 
     // COMPLETE ALU CONTROL UNIT
 	
+    always_comb begin
+        if (ex.alu_op[1]) begin
+            case (ex.funct3)
+                3'b111: alu_control = 4'b0000;
+                3'b110: alu_control = 4'b0001;
+                3'b100: alu_control = 4'b0011;
+                default: alu_control = (ex.funct7[5]) ? 4'b0110: 4'b0010;
+            endcase
+        end else begin
+            alu_control = (ex.alu_op[0]) ? 4'b0110: 4'b0010;
+        end
+    end
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
     // ---------------------------------------------------------------------
 
     // ----------------------------------------------------------------------
@@ -351,42 +333,36 @@ module pipeline_cpu
     logic   [REG_WIDTH-1:0]  alu_fwd_in1, alu_fwd_in2;   // outputs of forward MUXes
 
 	/* verilator lint_off CASEX */
-   // COMPLETE FORWARDING MUXES
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
+    // COMPLETE FORWARDING MUXES
+    assign alu_fwd_in1 = (forward_a == 2'b10) ? mem.alu_result :
+                         (forward_a == 2'b01) ? rd_din :
+                         ex.rs1_dout;
+
+    assign alu_fwd_in2 = (forward_b == 2'b10) ? mem.alu_result :
+                         (forward_b == 2'b01) ? rd_din :
+                         ex.rs2_dout;
    
    
 	/* verilator lint_on CASEX */
-
 	// COMPLETE THE FORWARDING UNIT
     // Need to prioritize forwarding conditions
+    always_comb begin
+        // forward_a (rs1)
+        if (mem.reg_write && (mem.rd != 5'b0) && (mem.rd == ex.rs1))
+            forward_a = 2'b10;
+        else if (wb.reg_write && (wb.rd != 5'b0) && (wb.rd == ex.rs1))
+            forward_a = 2'b01;
+        else
+            forward_a = 2'b00;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        // forward_b (rs2)
+        if (mem.reg_write && (mem.rd != 5'b0) && (mem.rd == ex.rs2))
+            forward_b = 2'b10;
+        else if (wb.reg_write && (wb.rd != 5'b0) && (wb.rd == ex.rs2))
+            forward_b = 2'b01;
+        else
+            forward_b = 2'b00;
+    end
 
 
     // -----------------------------------------------------------------------
@@ -396,8 +372,8 @@ module pipeline_cpu
     logic   [REG_WIDTH-1:0] alu_result;
     //logic           alu_zero;   // will not be used
 
-    assign alu_in1 =  /* FILL THIS */ 
-    assign alu_in2 =  /* FILL THIS */ 
+    assign alu_in1 = alu_fwd_in1;
+    assign alu_in2 = (ex.alu_src) ? ex.imm32 : alu_fwd_in2; 
 
     // instantiation: ALU
     alu #(
@@ -416,10 +392,13 @@ module pipeline_cpu
     logic           bu_zero, bu_sign;
     //logic           branch_taken;
 
-    assign sub_for_branch =  /* FILL THIS */ 
-    assign bu_zero =  /* FILL THIS */ 
-    assign bu_sign =  /* FILL THIS */ 
-    assign branch_taken =  /* FILL THIS */ 
+    assign sub_for_branch = alu_fwd_in1 - alu_fwd_in2;
+    assign bu_zero = ~|sub_for_branch;
+    assign bu_sign = sub_for_branch[31]; 
+    assign branch_taken = ex.branch[0] & bu_zero              // beq
+                        | ex.branch[1] & ~bu_zero             // bne
+                        | ex.branch[2] & bu_sign              // blt
+                        | ex.branch[3] & ~bu_sign;            // bge
 
     // -------------------------------------------------------------------------
     /* Ex/MEM pipeline register
@@ -430,14 +409,13 @@ module pipeline_cpu
         if (~reset_b) begin
             mem <= 'b0;
         end else begin
-			/* FILL THIS */ 
-	  
-	  
-	  
-	  
-	  
-	  
-	  
+            mem.alu_result <= alu_result;
+            mem.rs2_dout <= alu_fwd_in2;
+            mem.mem_read <= ex.mem_read;
+            mem.mem_write <= ex.mem_write;
+            mem.rd <= ex.rd;
+            mem.reg_write <= ex.reg_write;
+            mem.mem_to_reg <= ex.mem_to_reg;
         end
     end
 
