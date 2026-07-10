@@ -29,6 +29,11 @@ module alu
             //4'b0010: result = in1 + in2;
 			4'b0011: result = in1 ^ in2;
             4'b0110: result = in1 - in2;
+            4'b0100: result = in1 << in2[4:0];                        // SLL
+            4'b0101: result = in1 >> in2[4:0];                        // SRL
+            4'b0111: result = $signed(in1) >>> in2[4:0];              // SRA
+            4'b1000: result = ($signed(in1) < $signed(in2)) ? 32'd1 : 32'd0;  // SLT
+            4'b1001: result = (in1 < in2) ? 32'd1 : 32'd0;            // SLTU           
             default: result = in1 + in2;    // default = add
 		endcase
     end

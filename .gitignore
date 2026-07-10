@@ -1,2 +1,5 @@
 single_cycle_cpu.sv
 COSE222_Lab4.pdf
+obj_dir/
+*.vcd
+report.txt

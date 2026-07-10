@@ -112,8 +112,22 @@ module dmem
 	always_ff @ (posedge clk) begin
 		if (we[0]) d0[addr0] <= din_tmp[7:0];
 		if (we[1]) d1[addr1] <= din_tmp[15:8];
-		if (we[2]) d2[addr2] <= din_tmp[24:16];
-		if (we[3]) d3[addr3] <= din_tmp[31:25];
+		if (we[2]) d2[addr2] <= din_tmp[23:16];
+		if (we[3]) d3[addr3] <= din_tmp[31:24];
 	end
-	
+
+// synthesis translate_off
+	logic	[31:0]	tmp_mem [0:DMEM_DEPTH-1];
+	integer	i;
+	initial begin
+		$readmemh("dmem.mem", tmp_mem);
+		for (i = 0; i < DMEM_DEPTH; i = i + 1) begin
+			d0[i] = tmp_mem[i][7:0];
+			d1[i] = tmp_mem[i][15:8];
+			d2[i] = tmp_mem[i][23:16];
+			d3[i] = tmp_mem[i][31:24];
+		end
+	end
+// synthesis translate_on
+
 endmodule
