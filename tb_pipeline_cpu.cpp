@@ -5,7 +5,7 @@
 #include "Vpipeline_cpu.h"
 #include "Vpipeline_cpu___024root.h"
 #define CLK_T 10
-#define CLK_NUM 60
+#define CLK_NUM 120
 #define RST_OFF 2	// reset if released after this clock counts
 
 int main(int argc, char** argv, char** env) {
